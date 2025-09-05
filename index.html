@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Redirecting...</title>
+</head>
+<body>
+  <p id="status">Loading...</p>
+
+  <script>
+    async function go() {
+      const code = window.location.pathname.split("/").pop();
+
+      const res = await fetch("links.json?cache=" + Date.now());
+      const links = await res.json();
+
+      if (links[code]) {
+        document.getElementById("status").textContent = "Redirecting to " + links[code];
+        window.location.href = links[code];
+      } else {
+        document.getElementById("status").textContent = "404 - Link not found";
+      }
+    }
+    go();
+  </script>
+</body>
+</html>
