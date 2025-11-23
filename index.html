@@ -1,27 +1,98 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>Redirecting...</title>
-</head>
-<body>
-  <p id="status">Loading...</p>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Create Short Link</title>
+    <style>
+      body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; line-height: 1.6; }
+      input, button { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; }
+      button { background-color: #000; color: #fff; border: none; cursor: pointer; }
+      button:hover { background-color: #333; }
+      .result { margin-top: 20px; padding: 10px; background: #f0f0f0; word-break: break-all; display: none;}
+      .error { color: red; margin-bottom: 10px; }
+    </style>
+  </head>
+  <body>
+    <h1>🔗 Link Shortener</h1>
+    <p>Enter a URL and a custom slug to create a new short link.</p>
 
-  <script>
-    async function go() {
-      const code = window.location.pathname.split("/").pop();
+    <div id="error-msg" class="error"></div>
 
-      const res = await fetch("links.json?cache=" + Date.now());
-      const links = await res.json();
+    <input type="text" id="longUrl" placeholder="Destination URL (e.g., https://google.com)" />
+    <input type="text" id="customSlug" placeholder="Custom Back Half (e.g., my-link)" />
+    <button id="createBtn">Shorten URL</button>
 
-      if (links[code]) {
-        document.getElementById("status").textContent = "Redirecting to " + links[code];
-        window.location.href = links[code];
-      } else {
-        document.getElementById("status").textContent = "404 - Link not found";
-      }
-    }
-    go();
-  </script>
-</body>
+    <div id="result" class="result">
+      Success! Your link is:<br>
+      <a id="shortLink" href="#" target="_blank"></a>
+    </div>
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+      import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+
+      const firebaseConfig = {
+        apiKey: "AIzaSyDIHiX0ajmEbtkm1yZYzD2fIjt5RhH-X50",
+        authDomain: "nolonglinks.firebaseapp.com",
+        projectId: "nolonglinks",
+        storageBucket: "nolonglinks.firebasestorage.app",
+        messagingSenderId: "914293239640",
+        appId: "1:914293239640:web:c6c2ded71a3bc698fd3f2d"
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
+
+      document.getElementById('createBtn').addEventListener('click', async () => {
+        const longUrl = document.getElementById('longUrl').value.trim();
+        const slug = document.getElementById('customSlug').value.trim();
+        const errorMsg = document.getElementById('error-msg');
+        const resultDiv = document.getElementById('result');
+
+        errorMsg.textContent = "";
+        resultDiv.style.display = "none";
+
+        if (!longUrl || !slug) {
+          errorMsg.textContent = "Please fill in both fields.";
+          return;
+        }
+
+        // Basic URL validation
+        try {
+          new URL(longUrl);
+        } catch (_) {
+          errorMsg.textContent = "Invalid URL format. Include http:// or https://";
+          return;
+        }
+
+        try {
+          const docRef = doc(db, "links", slug);
+          
+          // Check if slug exists to prevent accidental overwrites
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            errorMsg.textContent = "This back half is already taken! Choose another.";
+            return;
+          }
+
+          // Write to Firestore
+          await setDoc(docRef, {
+            url: longUrl,
+            createdAt: new Date().toISOString()
+          });
+
+          // Show success
+          const shortUrl = window.location.origin + "/" + slug;
+          document.getElementById('shortLink').href = shortUrl;
+          document.getElementById('shortLink').textContent = shortUrl;
+          resultDiv.style.display = "block";
+          
+        } catch (e) {
+          console.error("Error adding document: ", e);
+          errorMsg.textContent = "Error creating link: " + e.message;
+        }
+      });
+    </script>
+  </body>
 </html>
