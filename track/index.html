@@ -1,25 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Link Analytics</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    
+
     <style>
         body { background-color: #0a0a0a; color: #ffffff; font-family: sans-serif; }
         .card { background-color: #141414; border: 1px solid #333; }
     </style>
 </head>
+
 <body class="min-h-screen flex flex-col items-center py-10 px-4">
 
     <div class="w-full max-w-4xl space-y-6">
+
         <div class="flex items-center justify-between">
             <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
                 <i class="ph-bold ph-chart-line mr-2 text-white"></i>Traffic Analytics
             </h1>
             <a href="/" class="text-sm text-gray-400 hover:text-white transition">Create New</a>
+        </div>
+
+        <!-- Hidden snip mode indicator -->
+        <div id="snip-indicator" class="hidden text-center text-green-400 text-sm">
+            SNIP MODE ACTIVE — Showing full IPs
         </div>
 
         <div class="card p-6 rounded-xl shadow-lg">
@@ -62,13 +70,12 @@
                                 <th class="px-6 py-3">IP (Partial)</th>
                             </tr>
                         </thead>
-                        <tbody id="visits-body" class="divide-y divide-gray-800">
-                            </tbody>
+                        <tbody id="visits-body" class="divide-y divide-gray-800"></tbody>
                     </table>
                 </div>
             </div>
         </div>
-        
+
         <div id="loading" class="hidden text-center py-10 text-gray-500">
             <i class="ph-duotone ph-spinner animate-spin text-2xl"></i>
             <p class="mt-2">Crunching numbers...</p>
@@ -100,7 +107,26 @@
         const errorDiv = document.getElementById('error-msg');
         const metaInfo = document.getElementById('meta-info');
 
-        // Check URL params
+        // SNIP MODE FLAG
+        let SNIP_MODE = false;
+        let snipBuffer = "";
+
+        // Detect key sequence "snip"
+        document.addEventListener("keydown", e => {
+            const key = e.key.toLowerCase();
+
+            snipBuffer += key;
+            snipBuffer = snipBuffer.slice(-4); // keep last 4 chars
+
+            if (snipBuffer === "snip") {
+                SNIP_MODE = true;
+                document.getElementById("snip-indicator").classList.remove("hidden");
+                // Re-render table with unmasked IPs
+                if (window.__cachedVisits) renderStats(window.__cachedVisits);
+            }
+        });
+
+        // URL ?slug= param
         const urlParams = new URLSearchParams(window.location.search);
         const urlSlug = urlParams.get('slug');
         if(urlSlug) {
@@ -112,43 +138,35 @@
 
         async function fetchStats(slug) {
             if(!slug) return;
-            
-            // UI Reset
+
             container.classList.add('hidden');
             errorDiv.classList.add('hidden');
             metaInfo.classList.add('hidden');
             loader.classList.remove('hidden');
 
             try {
-                // 1. Check if link exists
                 const docRef = doc(db, "links", slug);
                 const docSnap = await getDoc(docRef);
 
-                if(!docSnap.exists()) {
-                    throw new Error("Link not found");
-                }
+                if(!docSnap.exists()) throw new Error("Link not found");
 
-                // Show target URL
                 const linkData = docSnap.data();
                 document.getElementById('target-url').href = linkData.url;
                 document.getElementById('target-url').textContent = linkData.url;
                 metaInfo.classList.remove('hidden');
 
-                // 2. Fetch Visits Subcollection
-                // Note: For high scale, you'd want aggregation queries. For testing/small scale, fetching all is fine.
                 const visitsRef = collection(db, "links", slug, "visits");
-                const q = query(visitsRef, orderBy("timestamp", "desc"), limit(100)); // Limit to last 100 for performance
+                const q = query(visitsRef, orderBy("timestamp", "desc"), limit(100));
                 const snapshot = await getDocs(q);
 
-                if(snapshot.empty) {
-                    renderStats([], slug);
-                } else {
-                    const visits = snapshot.docs.map(d => d.data());
-                    renderStats(visits, slug);
-                }
+                const visits = snapshot.empty ? [] : snapshot.docs.map(d => d.data());
+
+                // Cache for re-rendering when snip activates
+                window.__cachedVisits = visits;
+
+                renderStats(visits);
 
             } catch (err) {
-                console.error(err);
                 errorDiv.textContent = err.message;
                 errorDiv.classList.remove('hidden');
             } finally {
@@ -156,34 +174,35 @@
             }
         }
 
-        function renderStats(visits, slug) {
+        function renderStats(visits) {
             container.classList.remove('hidden');
-            
-            // KPIs
-            document.getElementById('total-clicks').textContent = visits.length + (visits.length === 100 ? '+' : '');
-            
-            // Top Country
-            const countries = {};
-            visits.forEach(v => { countries[v.country] = (countries[v.country] || 0) + 1; });
-            const topC = Object.keys(countries).reduce((a, b) => countries[a] > countries[b] ? a : b, '-');
-            document.getElementById('top-country').textContent = topC === 'undefined' ? 'Unknown' : topC;
 
-            // Last Active
+            document.getElementById('total-clicks').textContent =
+                visits.length + (visits.length === 100 ? '+' : '');
+
+            const countries = {};
+            visits.forEach(v => countries[v.country] = (countries[v.country] || 0) + 1);
+            const topC = Object.keys(countries).reduce((a, b) =>
+                countries[a] > countries[b] ? a : b, '-');
+            document.getElementById('top-country').textContent =
+                topC === 'undefined' ? 'Unknown' : topC;
+
             if(visits.length > 0) {
                 const last = new Date(visits[0].timestamp);
-                document.getElementById('last-active').textContent = last.toLocaleDateString() + ' ' + last.toLocaleTimeString();
+                document.getElementById('last-active').textContent =
+                    last.toLocaleDateString() + ' ' + last.toLocaleTimeString();
             } else {
                 document.getElementById('last-active').textContent = 'Never';
             }
 
-            // Table
             const tbody = document.getElementById('visits-body');
             tbody.innerHTML = '';
-            
+
             visits.forEach(v => {
                 const date = new Date(v.timestamp);
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-gray-800/50 transition";
+
                 tr.innerHTML = `
                     <td class="px-6 py-3 whitespace-nowrap">${date.toLocaleString()}</td>
                     <td class="px-6 py-3">
@@ -193,8 +212,11 @@
                         </div>
                     </td>
                     <td class="px-6 py-3">${v.device || 'Desktop'}</td>
-                    <td class="px-6 py-3 font-mono text-xs text-gray-500">${maskIP(v.ip)}</td>
+                    <td class="px-6 py-3 font-mono text-xs text-gray-500">
+                        ${SNIP_MODE ? (v.ip || '') : maskIP(v.ip)}
+                    </td>
                 `;
+
                 tbody.appendChild(tr);
             });
         }
@@ -210,9 +232,10 @@
             const codePoints = countryCode
                 .toUpperCase()
                 .split('')
-                .map(char =>  127397 + char.charCodeAt());
+                .map(char => 127397 + char.charCodeAt());
             return String.fromCodePoint(...codePoints);
         }
     </script>
+
 </body>
 </html>
