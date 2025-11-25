@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Link Analytics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <style>
+        body { background-color: #0a0a0a; color: #ffffff; font-family: sans-serif; }
+        .card { background-color: #141414; border: 1px solid #333; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center py-10 px-4">
+
+    <div class="w-full max-w-4xl space-y-6">
+        <div class="flex items-center justify-between">
+            <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
+                <i class="ph-bold ph-chart-line mr-2 text-white"></i>Traffic Analytics
+            </h1>
+            <a href="/" class="text-sm text-gray-400 hover:text-white transition">Create New</a>
+        </div>
+
+        <div class="card p-6 rounded-xl shadow-lg">
+            <div class="flex gap-4">
+                <input type="text" id="slug-input" placeholder="Enter slug..." class="flex-1 bg-black border border-gray-700 rounded-lg px-4 py-2 focus:border-indigo-500 outline-none text-white">
+                <button id="load-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition">
+                    Load Data
+                </button>
+            </div>
+            <div id="meta-info" class="mt-4 text-sm text-gray-400 hidden">
+                Target: <a id="target-url" href="#" target="_blank" class="text-indigo-400 hover:underline"></a>
+            </div>
+        </div>
+
+        <div id="stats-container" class="hidden space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="card p-6 rounded-xl">
+                    <div class="text-gray-400 text-sm mb-1">Total Clicks</div>
+                    <div class="text-4xl font-bold text-white" id="total-clicks">0</div>
+                </div>
+                <div class="card p-6 rounded-xl">
+                    <div class="text-gray-400 text-sm mb-1">Top Country</div>
+                    <div class="text-2xl font-bold text-white truncate" id="top-country">-</div>
+                </div>
+                <div class="card p-6 rounded-xl">
+                    <div class="text-gray-400 text-sm mb-1">Last Active</div>
+                    <div class="text-lg font-bold text-white" id="last-active">-</div>
+                </div>
+            </div>
+
+            <div class="card rounded-xl overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-800 font-semibold">Recent Visits</div>
+                <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                    <table class="w-full text-left text-sm text-gray-400">
+                        <thead class="bg-gray-900 text-gray-200">
+                            <tr>
+                                <th class="px-6 py-3">Time</th>
+                                <th class="px-6 py-3">Location</th>
+                                <th class="px-6 py-3">Device</th>
+                                <th class="px-6 py-3">IP (Partial)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="visits-body" class="divide-y divide-gray-800">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div id="loading" class="hidden text-center py-10 text-gray-500">
+            <i class="ph-duotone ph-spinner animate-spin text-2xl"></i>
+            <p class="mt-2">Crunching numbers...</p>
+        </div>
+
+        <div id="error-msg" class="hidden text-center py-10 text-red-400"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+        import { getFirestore, doc, getDoc, collection, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDIHiX0ajmEbtkm1yZYzD2fIjt5RhH-X50",
+            authDomain: "nolonglinks.firebaseapp.com",
+            projectId: "nolonglinks",
+            storageBucket: "nolonglinks.firebasestorage.app",
+            messagingSenderId: "914293239640",
+            appId: "1:914293239640:web:c6c2ded71a3bc698fd3f2d"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const input = document.getElementById('slug-input');
+        const loadBtn = document.getElementById('load-btn');
+        const container = document.getElementById('stats-container');
+        const loader = document.getElementById('loading');
+        const errorDiv = document.getElementById('error-msg');
+        const metaInfo = document.getElementById('meta-info');
+
+        // Check URL params
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlSlug = urlParams.get('slug');
+        if(urlSlug) {
+            input.value = urlSlug;
+            fetchStats(urlSlug);
+        }
+
+        loadBtn.addEventListener('click', () => fetchStats(input.value.trim()));
+
+        async function fetchStats(slug) {
+            if(!slug) return;
+            
+            // UI Reset
+            container.classList.add('hidden');
+            errorDiv.classList.add('hidden');
+            metaInfo.classList.add('hidden');
+            loader.classList.remove('hidden');
+
+            try {
+                // 1. Check if link exists
+                const docRef = doc(db, "links", slug);
+                const docSnap = await getDoc(docRef);
+
+                if(!docSnap.exists()) {
+                    throw new Error("Link not found");
+                }
+
+                // Show target URL
+                const linkData = docSnap.data();
+                document.getElementById('target-url').href = linkData.url;
+                document.getElementById('target-url').textContent = linkData.url;
+                metaInfo.classList.remove('hidden');
+
+                // 2. Fetch Visits Subcollection
+                // Note: For high scale, you'd want aggregation queries. For testing/small scale, fetching all is fine.
+                const visitsRef = collection(db, "links", slug, "visits");
+                const q = query(visitsRef, orderBy("timestamp", "desc"), limit(100)); // Limit to last 100 for performance
+                const snapshot = await getDocs(q);
+
+                if(snapshot.empty) {
+                    renderStats([], slug);
+                } else {
+                    const visits = snapshot.docs.map(d => d.data());
+                    renderStats(visits, slug);
+                }
+
+            } catch (err) {
+                console.error(err);
+                errorDiv.textContent = err.message;
+                errorDiv.classList.remove('hidden');
+            } finally {
+                loader.classList.add('hidden');
+            }
+        }
+
+        function renderStats(visits, slug) {
+            container.classList.remove('hidden');
+            
+            // KPIs
+            document.getElementById('total-clicks').textContent = visits.length + (visits.length === 100 ? '+' : '');
+            
+            // Top Country
+            const countries = {};
+            visits.forEach(v => { countries[v.country] = (countries[v.country] || 0) + 1; });
+            const topC = Object.keys(countries).reduce((a, b) => countries[a] > countries[b] ? a : b, '-');
+            document.getElementById('top-country').textContent = topC === 'undefined' ? 'Unknown' : topC;
+
+            // Last Active
+            if(visits.length > 0) {
+                const last = new Date(visits[0].timestamp);
+                document.getElementById('last-active').textContent = last.toLocaleDateString() + ' ' + last.toLocaleTimeString();
+            } else {
+                document.getElementById('last-active').textContent = 'Never';
+            }
+
+            // Table
+            const tbody = document.getElementById('visits-body');
+            tbody.innerHTML = '';
+            
+            visits.forEach(v => {
+                const date = new Date(v.timestamp);
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-800/50 transition";
+                tr.innerHTML = `
+                    <td class="px-6 py-3 whitespace-nowrap">${date.toLocaleString()}</td>
+                    <td class="px-6 py-3">
+                        <div class="flex items-center gap-2">
+                            <span>${v.countryCode === 'UN' || !v.countryCode ? '🌐' : getFlagEmoji(v.countryCode)}</span>
+                            <span>${v.city || 'Unknown'}, ${v.country || 'Unknown'}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-3">${v.device || 'Desktop'}</td>
+                    <td class="px-6 py-3 font-mono text-xs text-gray-500">${maskIP(v.ip)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function maskIP(ip) {
+            if(!ip) return '';
+            const parts = ip.split('.');
+            if(parts.length === 4) return `${parts[0]}.${parts[1]}.*.*`;
+            return ip.substring(0, 10) + '...';
+        }
+
+        function getFlagEmoji(countryCode) {
+            const codePoints = countryCode
+                .toUpperCase()
+                .split('')
+                .map(char =>  127397 + char.charCodeAt());
+            return String.fromCodePoint(...codePoints);
+        }
+    </script>
+</body>
+</html>
