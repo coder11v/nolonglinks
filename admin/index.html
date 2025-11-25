@@ -4,19 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Link Manager</title>
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    <!-- Google Font -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 
     <style>
         body { font-family: 'Inter', sans-serif; }
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        
-        /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #1f2937; }
         ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
@@ -25,7 +20,6 @@
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen flex flex-col">
 
-    <!-- LOGIN VIEW -->
     <div id="login-view" class="flex-grow flex items-center justify-center p-4">
         <div class="bg-gray-800 p-8 rounded-xl shadow-2xl border border-gray-700 w-full max-w-md fade-in">
             <div class="text-center mb-8">
@@ -56,9 +50,7 @@
         </div>
     </div>
 
-    <!-- DASHBOARD VIEW -->
     <div id="dashboard-view" class="hidden flex-grow flex flex-col h-screen">
-        <!-- Header -->
         <header class="bg-gray-800 border-b border-gray-700 px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 sticky top-0 z-20">
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 bg-blue-600/20 text-blue-400 rounded-lg flex items-center justify-center">
@@ -83,16 +75,13 @@
             </div>
         </header>
 
-        <!-- Content -->
         <main class="flex-grow overflow-auto p-4 md:p-6">
             <div class="max-w-7xl mx-auto">
-                <!-- Loader -->
                 <div id="loader" class="flex flex-col items-center justify-center py-20">
                     <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
                     <p class="text-gray-400 mt-4 animate-pulse">Fetching from Firestore...</p>
                 </div>
 
-                <!-- Table Container -->
                 <div id="table-container" class="hidden bg-gray-800 rounded-xl border border-gray-700 shadow-xl overflow-hidden">
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse">
@@ -104,14 +93,11 @@
                                     <th class="px-6 py-4 font-medium text-right">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody id="links-body" class="divide-y divide-gray-700 text-sm">
-                                <!-- Rows injected here -->
-                            </tbody>
+                            <tbody id="links-body" class="divide-y divide-gray-700 text-sm"></tbody>
                         </table>
                     </div>
                 </div>
 
-                <!-- Empty State -->
                 <div id="empty-state" class="hidden flex flex-col items-center justify-center py-20 text-gray-500">
                     <i class="ph-duotone ph-ghost text-6xl mb-4"></i>
                     <p>No links found matching your criteria.</p>
@@ -120,39 +106,31 @@
         </main>
     </div>
 
-    <!-- Notification Toast -->
     <div id="toast" class="fixed bottom-5 right-5 bg-blue-600 text-white px-4 py-3 rounded-lg shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 flex items-center gap-3 z-50">
         <i class="ph-bold ph-check-circle text-xl"></i>
         <span id="toast-msg">Action successful</span>
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-        import { getFirestore, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+        import { getFirestore, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 
-        // --- Configuration ---
         const firebaseConfig = {
             apiKey: "AIzaSyDIHiX0ajmEbtkm1yZYzD2fIjt5RhH-X50",
             authDomain: "nolonglinks.firebaseapp.com",
             projectId: "nolonglinks",
             storageBucket: "nolonglinks.firebasestorage.app",
             messagingSenderId: "914293239640",
-            appId: "1:914293239640:web:5db800a9d86ff7a9fd3f2d"
+            appId: "1:914293239640:web:c6c2ded71a3bc698fd3f2d"
         };
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // --- State ---
         let allLinks = [];
-        // Base64 of 'sniplinks!'
-        const AUTH_HASH = "c25pcGxpbmtzIQ=="; 
+        const AUTH_HASH = "c25pcGxpbmtzIQ=="; // 'sniplinks!'
 
-        // --- DOM Elements ---
-        const views = {
-            login: document.getElementById('login-view'),
-            dashboard: document.getElementById('dashboard-view')
-        };
+        const views = { login: document.getElementById('login-view'), dashboard: document.getElementById('dashboard-view') };
         const loginForm = document.getElementById('login-form');
         const passInput = document.getElementById('password-input');
         const errorMsg = document.getElementById('error-msg');
@@ -163,7 +141,6 @@
         const countLabel = document.getElementById('record-count');
         const emptyState = document.getElementById('empty-state');
 
-        // --- Authentication ---
         function checkSession() {
             if (localStorage.getItem('sniplinks_auth') === 'true') {
                 showDashboard();
@@ -175,9 +152,7 @@
 
         loginForm.addEventListener('submit', (e) => {
             e.preventDefault();
-            const val = passInput.value;
-            // Simple client-side check using btoa to obscure the plain text string in code
-            if (btoa(val) === AUTH_HASH) {
+            if (btoa(passInput.value) === AUTH_HASH) {
                 localStorage.setItem('sniplinks_auth', 'true');
                 showDashboard();
                 errorMsg.classList.add('hidden');
@@ -193,15 +168,11 @@
             location.reload();
         });
 
-        // --- Main Logic ---
         async function showDashboard() {
             views.login.classList.add('hidden');
             views.dashboard.classList.remove('hidden');
             
             try {
-                // Fetch Data
-                // Note: Using client-side filtering since we want ALL links and the dataset is likely manageable.
-                // If dataset is huge, server-side pagination/filtering is needed.
                 const q = query(collection(db, "links"));
                 const querySnapshot = await getDocs(q);
                 
@@ -215,13 +186,9 @@
                     });
                 });
 
-                // Sort client side by date descending (newest first)
-                // Assuming standard ISO strings
                 allLinks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
                 renderTable(allLinks);
                 loader.classList.add('hidden');
-                tableContainer.classList.remove('hidden');
 
             } catch (error) {
                 console.error("Error fetching documents: ", error);
@@ -246,16 +213,11 @@
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-gray-700/50 transition-colors group";
                 
-                // Truncate long URL for display
                 const displayUrl = link.url.length > 50 ? link.url.substring(0, 50) + '...' : link.url;
-                
-                // Format Date nicely
                 let dateStr = link.createdAt;
                 try {
                     const d = new Date(link.createdAt);
-                    if (!isNaN(d)) {
-                        dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    }
+                    if (!isNaN(d)) dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                 } catch(e) {}
 
                 tr.innerHTML = `
@@ -275,19 +237,22 @@
                         ${dateStr}
                     </td>
                     <td class="px-6 py-4 text-right">
-                        <button onclick="copyToClipboard('${link.url}')" 
-                            class="text-gray-500 hover:text-blue-400 p-2 rounded-full hover:bg-blue-500/10 transition-colors" title="Copy Destination">
-                            <i class="ph-bold ph-copy"></i>
-                        </button>
+                        <div class="flex items-center justify-end gap-2">
+                             <a href="/track/?slug=${link.id}" target="_blank"
+                                class="text-gray-500 hover:text-indigo-400 p-2 rounded-full hover:bg-indigo-500/10 transition-colors" title="View Analytics">
+                                <i class="ph-bold ph-chart-bar"></i>
+                            </a>
+                            <button onclick="copyToClipboard('${link.url}')" 
+                                class="text-gray-500 hover:text-blue-400 p-2 rounded-full hover:bg-blue-500/10 transition-colors" title="Copy Destination">
+                                <i class="ph-bold ph-copy"></i>
+                            </button>
+                        </div>
                     </td>
                 `;
                 linksBody.appendChild(tr);
             });
         }
 
-        // --- Utilities ---
-        
-        // Search Filter
         searchInput.addEventListener('input', (e) => {
             const term = e.target.value.toLowerCase();
             const filtered = allLinks.filter(link => 
@@ -297,7 +262,6 @@
             renderTable(filtered);
         });
 
-        // Copy Function
         window.copyToClipboard = (text) => {
             const el = document.createElement('textarea');
             el.value = text;
@@ -306,21 +270,15 @@
             document.execCommand('copy');
             document.body.removeChild(el);
             
-            showToast(`Copied: ${text.substring(0, 20)}...`);
-        };
-
-        function showToast(msg) {
             const toast = document.getElementById('toast');
-            document.getElementById('toast-msg').textContent = msg;
+            document.getElementById('toast-msg').textContent = `Copied: ${text.substring(0, 20)}...`;
             toast.classList.remove('translate-y-20', 'opacity-0');
             setTimeout(() => {
                 toast.classList.add('translate-y-20', 'opacity-0');
             }, 2500);
-        }
+        };
 
-        // Init
         checkSession();
-
     </script>
 </body>
 </html>
